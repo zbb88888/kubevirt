@@ -2264,6 +2264,53 @@ spec:
                   Specifies if kubevirt can be deleted if workloads are still present.
                   This is mainly a precaution to avoid accidental data loss
                 type: string
+              virtHandler:
+                description: |-
+                  VirtHandler configures virt-handler specific deployment options including
+                  hostNetwork mode and resource requirements.
+                properties:
+                  hostNetwork:
+                    description: |-
+                      HostNetwork configures virt-handler to use host network mode.
+                      When enabled, port must be specified to avoid port conflicts.
+                    properties:
+                      port:
+                        description: |-
+                          Port specifies the port for virt-handler when running in hostNetwork mode.
+                          This is required when HostNetwork is enabled to avoid port conflicts.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    required:
+                    - port
+                    type: object
+                  resources:
+                    description: |-
+                      Resources specifies the resource requirements for virt-handler.
+                      When specified, both CPU and Memory must be set, and requests will equal limits
+                      to ensure Guaranteed QoS class.
+                    properties:
+                      cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          CPU specifies the CPU resource request and limit.
+                          This value is used for both request and limit to achieve Guaranteed QoS.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          Memory specifies the memory resource request and limit.
+                          This value is used for both request and limit to achieve Guaranteed QoS.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    type: object
+                type: object
               workloadUpdateStrategy:
                 description: |-
                   WorkloadUpdateStrategy defines at the cluster level how to handle
@@ -5652,6 +5699,53 @@ spec:
                   Specifies if kubevirt can be deleted if workloads are still present.
                   This is mainly a precaution to avoid accidental data loss
                 type: string
+              virtHandler:
+                description: |-
+                  VirtHandler configures virt-handler specific deployment options including
+                  hostNetwork mode and resource requirements.
+                properties:
+                  hostNetwork:
+                    description: |-
+                      HostNetwork configures virt-handler to use host network mode.
+                      When enabled, port must be specified to avoid port conflicts.
+                    properties:
+                      port:
+                        description: |-
+                          Port specifies the port for virt-handler when running in hostNetwork mode.
+                          This is required when HostNetwork is enabled to avoid port conflicts.
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    required:
+                    - port
+                    type: object
+                  resources:
+                    description: |-
+                      Resources specifies the resource requirements for virt-handler.
+                      When specified, both CPU and Memory must be set, and requests will equal limits
+                      to ensure Guaranteed QoS class.
+                    properties:
+                      cpu:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          CPU specifies the CPU resource request and limit.
+                          This value is used for both request and limit to achieve Guaranteed QoS.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      memory:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: |-
+                          Memory specifies the memory resource request and limit.
+                          This value is used for both request and limit to achieve Guaranteed QoS.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    type: object
+                type: object
               workloadUpdateStrategy:
                 description: |-
                   WorkloadUpdateStrategy defines at the cluster level how to handle

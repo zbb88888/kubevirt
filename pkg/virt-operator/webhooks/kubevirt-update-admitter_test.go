@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	admissionv1 "k8s.io/api/admission/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -337,6 +338,115 @@ var _ = Describe("Validating KubeVirtUpdate Admitter", func() {
 		},
 			Entry("should warn when archConfig is set for ppc64le", true, &v1.ArchConfiguration{Ppc64le: &v1.ArchSpecificConfiguration{}}),
 			Entry("should not warn when archConfig is not set for ppc64le", false, &v1.ArchConfiguration{}),
+		)
+	})
+
+	Context("with VirtHandlerConfig validation", func() {
+		DescribeTable("validateVirtHandlerConfig", func(handler *v1.VirtHandlerConfig, expectedCauses int, expectedFields []string) {
+			causes := validateVirtHandlerConfig(handler)
+			Expect(causes).To(HaveLen(expectedCauses))
+			for i, cause := range causes {
+				if i < len(expectedFields) {
+					Expect(cause.Field).To(ContainSubstring(expectedFields[i]))
+				}
+			}
+		},
+			Entry("nil handler config should pass",
+				nil,
+				0,
+				[]string{},
+			),
+			Entry("handler without hostNetwork should pass",
+				&v1.VirtHandlerConfig{},
+				0,
+				[]string{},
+			),
+			Entry("hostNetwork without port should fail",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 0,
+					},
+				},
+				1, // only port invalid (resources now independent)
+				[]string{"port"},
+			),
+			Entry("hostNetwork with invalid port should fail",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 70000, // invalid port
+					},
+				},
+				1, // only port invalid
+				[]string{"port"},
+			),
+			Entry("hostNetwork with valid port but no resources should pass",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 8443,
+					},
+				},
+				0, // resources are now optional
+				[]string{},
+			),
+			Entry("hostNetwork with minimum valid port (1) should pass",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 1,
+					},
+				},
+				0,
+				[]string{},
+			),
+			Entry("hostNetwork with maximum valid port (65535) should pass",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 65535,
+					},
+				},
+				0,
+				[]string{},
+			),
+			Entry("resources without hostNetwork but missing CPU should fail",
+				&v1.VirtHandlerConfig{
+					Resources: &v1.VirtHandlerResourceRequirements{
+						Memory: pointer.P(resource.MustParse("512Mi")),
+					},
+				},
+				1,
+				[]string{"cpu"},
+			),
+			Entry("resources without hostNetwork but missing Memory should fail",
+				&v1.VirtHandlerConfig{
+					Resources: &v1.VirtHandlerResourceRequirements{
+						CPU: pointer.P(resource.MustParse("100m")),
+					},
+				},
+				1,
+				[]string{"memory"},
+			),
+			Entry("resources with both CPU and Memory should pass",
+				&v1.VirtHandlerConfig{
+					Resources: &v1.VirtHandlerResourceRequirements{
+						CPU:    pointer.P(resource.MustParse("100m")),
+						Memory: pointer.P(resource.MustParse("512Mi")),
+					},
+				},
+				0,
+				[]string{},
+			),
+			Entry("hostNetwork with complete resources should pass",
+				&v1.VirtHandlerConfig{
+					HostNetwork: &v1.VirtHandlerNetworkConfig{
+						Port: 8443,
+					},
+					Resources: &v1.VirtHandlerResourceRequirements{
+						CPU:    pointer.P(resource.MustParse("100m")),
+						Memory: pointer.P(resource.MustParse("512Mi")),
+					},
+				},
+				0,
+				[]string{},
+			),
 		)
 	})
 })

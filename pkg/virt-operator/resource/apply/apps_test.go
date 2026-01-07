@@ -27,11 +27,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	secv1 "github.com/openshift/api/security/v1"
+	secv1fake "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1/fake"
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,10 +43,6 @@ import (
 	"k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
-
-	secv1 "github.com/openshift/api/security/v1"
-	secv1fake "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1/fake"
-
 	v1 "kubevirt.io/api/core/v1"
 	"kubevirt.io/client-go/kubecli"
 
@@ -1356,3 +1355,169 @@ func createFakeNodes(client *fake.Clientset, schedulableNodesCount, unschedulabl
 		Expect(err).ToNot(HaveOccurred())
 	}
 }
+
+var _ = Describe("Handler Configuration", func() {
+	var (
+		kv        *v1.KubeVirt
+		daemonset *appsv1.DaemonSet
+	)
+
+	BeforeEach(func() {
+		kv = &v1.KubeVirt{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "kubevirt",
+				Namespace: "kubevirt",
+			},
+		}
+		daemonset = &appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "virt-handler",
+				Namespace: "kubevirt",
+			},
+			Spec: appsv1.DaemonSetSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name: "virt-handler",
+								Args: []string{"--port", "8443", "--hostname-override", "$(NODE_NAME)"},
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "metrics",
+										Protocol:      corev1.ProtocolTCP,
+										ContainerPort: 8443,
+									},
+								},
+								LivenessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Port: intstr.FromInt(8443),
+										},
+									},
+								},
+								ReadinessProbe: &corev1.Probe{
+									ProbeHandler: corev1.ProbeHandler{
+										HTTPGet: &corev1.HTTPGetAction{
+											Port: intstr.FromInt(8443),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+
+	It("should not modify daemonset when handler config is not configured", func() {
+		originalDs := daemonset.DeepCopy()
+		applyVirtHandlerConfig(kv, daemonset)
+		Expect(daemonset.Spec.Template.Spec.HostNetwork).To(BeFalse())
+		Expect(equality.Semantic.DeepEqual(originalDs.Spec.Template.Spec.Containers, daemonset.Spec.Template.Spec.Containers)).To(BeTrue())
+	})
+
+	It("should enable hostNetwork when configured", func() {
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			HostNetwork: &v1.VirtHandlerNetworkConfig{
+				Port: 9443,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		Expect(daemonset.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(daemonset.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+	})
+
+	It("should update container port with hostPort when hostNetwork is enabled", func() {
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			HostNetwork: &v1.VirtHandlerNetworkConfig{
+				Port: 9443,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		container := &daemonset.Spec.Template.Spec.Containers[0]
+		Expect(container.Ports).To(HaveLen(1))
+		Expect(container.Ports[0].ContainerPort).To(Equal(int32(9443)))
+		Expect(container.Ports[0].HostPort).To(Equal(int32(9443)))
+	})
+
+	It("should update probes to use the new port", func() {
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			HostNetwork: &v1.VirtHandlerNetworkConfig{
+				Port: 9443,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		container := &daemonset.Spec.Template.Spec.Containers[0]
+		Expect(container.LivenessProbe.HTTPGet.Port.IntValue()).To(Equal(9443))
+		Expect(container.ReadinessProbe.HTTPGet.Port.IntValue()).To(Equal(9443))
+	})
+
+	It("should update --port arg when hostNetwork is enabled", func() {
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			HostNetwork: &v1.VirtHandlerNetworkConfig{
+				Port: 9443,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		container := &daemonset.Spec.Template.Spec.Containers[0]
+		// Verify --port arg is updated
+		foundPort := false
+		for i, arg := range container.Args {
+			if arg == "--port" && i+1 < len(container.Args) {
+				Expect(container.Args[i+1]).To(Equal("9443"))
+				foundPort = true
+				break
+			}
+		}
+		Expect(foundPort).To(BeTrue(), "expected --port arg to be present")
+	})
+
+	It("should apply Guaranteed QoS resources when specified with hostNetwork", func() {
+		cpu := resource.MustParse("200m")
+		memory := resource.MustParse("512Mi")
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			HostNetwork: &v1.VirtHandlerNetworkConfig{
+				Port: 9443,
+			},
+			Resources: &v1.VirtHandlerResourceRequirements{
+				CPU:    &cpu,
+				Memory: &memory,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		container := &daemonset.Spec.Template.Spec.Containers[0]
+		// Guaranteed QoS: requests == limits
+		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(cpu))
+		Expect(container.Resources.Limits[corev1.ResourceCPU]).To(Equal(cpu))
+		Expect(container.Resources.Requests[corev1.ResourceMemory]).To(Equal(memory))
+		Expect(container.Resources.Limits[corev1.ResourceMemory]).To(Equal(memory))
+	})
+
+	It("should apply Guaranteed QoS resources without hostNetwork", func() {
+		cpu := resource.MustParse("500m")
+		memory := resource.MustParse("1Gi")
+		kv.Spec.VirtHandler = &v1.VirtHandlerConfig{
+			Resources: &v1.VirtHandlerResourceRequirements{
+				CPU:    &cpu,
+				Memory: &memory,
+			},
+		}
+		applyVirtHandlerConfig(kv, daemonset)
+
+		// Should not enable hostNetwork
+		Expect(daemonset.Spec.Template.Spec.HostNetwork).To(BeFalse())
+
+		container := &daemonset.Spec.Template.Spec.Containers[0]
+		// Guaranteed QoS: requests == limits
+		Expect(container.Resources.Requests[corev1.ResourceCPU]).To(Equal(cpu))
+		Expect(container.Resources.Limits[corev1.ResourceCPU]).To(Equal(cpu))
+		Expect(container.Resources.Requests[corev1.ResourceMemory]).To(Equal(memory))
+		Expect(container.Resources.Limits[corev1.ResourceMemory]).To(Equal(memory))
+	})
+})

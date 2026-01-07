@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-
 	cdiv1 "kubevirt.io/containerized-data-importer-api/pkg/apis/core/v1beta1"
 )
 
@@ -2545,6 +2544,11 @@ type KubeVirtSpec struct {
 	// selectors and tolerations that should apply to KubeVirt workloads
 	// +optional
 	Workloads *ComponentConfig `json:"workloads,omitempty"`
+
+	// VirtHandler configures virt-handler specific deployment options including
+	// hostNetwork mode and resource requirements.
+	// +optional
+	VirtHandler *VirtHandlerConfig `json:"virtHandler,omitempty"`
 
 	CustomizeComponents CustomizeComponents `json:"customizeComponents,omitempty"`
 }

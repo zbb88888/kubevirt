@@ -666,6 +666,7 @@ func (KubeVirtSpec) SwaggerDoc() map[string]string {
 		"configuration":           "holds kubevirt configurations.\nsame as the virt-configMap",
 		"infra":                   "selectors and tolerations that should apply to KubeVirt infrastructure components\n+optional",
 		"workloads":               "selectors and tolerations that should apply to KubeVirt workloads\n+optional",
+		"virtHandler":             "VirtHandler configures virt-handler specific deployment options including\nhostNetwork mode and resource requirements.\n+optional",
 	}
 }
 

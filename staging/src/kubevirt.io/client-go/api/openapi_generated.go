@@ -559,6 +559,9 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"kubevirt.io/api/core/v1.VMISelector":                                                             schema_kubevirtio_api_core_v1_VMISelector(ref),
 		"kubevirt.io/api/core/v1.VSOCKOptions":                                                            schema_kubevirtio_api_core_v1_VSOCKOptions(ref),
 		"kubevirt.io/api/core/v1.VideoDevice":                                                             schema_kubevirtio_api_core_v1_VideoDevice(ref),
+		"kubevirt.io/api/core/v1.VirtHandlerConfig":                                                       schema_kubevirtio_api_core_v1_VirtHandlerConfig(ref),
+		"kubevirt.io/api/core/v1.VirtHandlerNetworkConfig":                                                schema_kubevirtio_api_core_v1_VirtHandlerNetworkConfig(ref),
+		"kubevirt.io/api/core/v1.VirtHandlerResourceRequirements":                                         schema_kubevirtio_api_core_v1_VirtHandlerResourceRequirements(ref),
 		"kubevirt.io/api/core/v1.VirtualMachine":                                                          schema_kubevirtio_api_core_v1_VirtualMachine(ref),
 		"kubevirt.io/api/core/v1.VirtualMachineCondition":                                                 schema_kubevirtio_api_core_v1_VirtualMachineCondition(ref),
 		"kubevirt.io/api/core/v1.VirtualMachineInstance":                                                  schema_kubevirtio_api_core_v1_VirtualMachineInstance(ref),
@@ -23085,6 +23088,12 @@ func schema_kubevirtio_api_core_v1_KubeVirtSpec(ref common.ReferenceCallback) co
 							Ref:         ref("kubevirt.io/api/core/v1.ComponentConfig"),
 						},
 					},
+					"virtHandler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "VirtHandler configures virt-handler specific deployment options including hostNetwork mode and resource requirements.",
+							Ref:         ref("kubevirt.io/api/core/v1.VirtHandlerConfig"),
+						},
+					},
 					"customizeComponents": {
 						SchemaProps: spec.SchemaProps{
 							Default: map[string]interface{}{},
@@ -23095,7 +23104,7 @@ func schema_kubevirtio_api_core_v1_KubeVirtSpec(ref common.ReferenceCallback) co
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.LocalObjectReference", "kubevirt.io/api/core/v1.ComponentConfig", "kubevirt.io/api/core/v1.CustomizeComponents", "kubevirt.io/api/core/v1.KubeVirtCertificateRotateStrategy", "kubevirt.io/api/core/v1.KubeVirtConfiguration", "kubevirt.io/api/core/v1.KubeVirtWorkloadUpdateStrategy"},
+			"k8s.io/api/core/v1.LocalObjectReference", "kubevirt.io/api/core/v1.ComponentConfig", "kubevirt.io/api/core/v1.CustomizeComponents", "kubevirt.io/api/core/v1.KubeVirtCertificateRotateStrategy", "kubevirt.io/api/core/v1.KubeVirtConfiguration", "kubevirt.io/api/core/v1.KubeVirtWorkloadUpdateStrategy", "kubevirt.io/api/core/v1.VirtHandlerConfig"},
 	}
 }
 
@@ -26402,6 +26411,82 @@ func schema_kubevirtio_api_core_v1_VideoDevice(ref common.ReferenceCallback) com
 				},
 			},
 		},
+	}
+}
+
+func schema_kubevirtio_api_core_v1_VirtHandlerConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VirtHandlerConfig configures virt-handler deployment options.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"hostNetwork": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HostNetwork configures virt-handler to use host network mode. When enabled, port must be specified to avoid port conflicts.",
+							Ref:         ref("kubevirt.io/api/core/v1.VirtHandlerNetworkConfig"),
+						},
+					},
+					"resources": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Resources specifies the resource requirements for virt-handler. When specified, both CPU and Memory must be set, and requests will equal limits to ensure Guaranteed QoS class.",
+							Ref:         ref("kubevirt.io/api/core/v1.VirtHandlerResourceRequirements"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"kubevirt.io/api/core/v1.VirtHandlerNetworkConfig", "kubevirt.io/api/core/v1.VirtHandlerResourceRequirements"},
+	}
+}
+
+func schema_kubevirtio_api_core_v1_VirtHandlerNetworkConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VirtHandlerNetworkConfig configures networking for virt-handler.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"port": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Port specifies the port for virt-handler when running in hostNetwork mode. This is required when HostNetwork is enabled to avoid port conflicts.",
+							Default:     0,
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
+				},
+				Required: []string{"port"},
+			},
+		},
+	}
+}
+
+func schema_kubevirtio_api_core_v1_VirtHandlerResourceRequirements(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "VirtHandlerResourceRequirements specifies resource requirements for virt-handler. When specified, both CPU and Memory must be set to ensure Guaranteed QoS class (requests equal limits).",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"cpu": {
+						SchemaProps: spec.SchemaProps{
+							Description: "CPU specifies the CPU resource request and limit. This value is used for both request and limit to achieve Guaranteed QoS.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+					"memory": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Memory specifies the memory resource request and limit. This value is used for both request and limit to achieve Guaranteed QoS.",
+							Ref:         ref("k8s.io/apimachinery/pkg/api/resource.Quantity"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/api/resource.Quantity"},
 	}
 }
 

@@ -426,6 +426,12 @@ spec:
   serviceMonitorNamespace: serviceMonitorNamespaceValue
   synchronizationPort: synchronizationPortValue
   uninstallStrategy: uninstallStrategyValue
+  virtHandler:
+    hostNetwork:
+      port: -4
+    resources:
+      cpu: "0"
+      memory: "0"
   workloadUpdateStrategy:
     batchEvictionInterval: 1ns
     batchEvictionSize: -17

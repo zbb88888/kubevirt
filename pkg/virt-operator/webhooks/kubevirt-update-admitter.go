@@ -111,6 +111,9 @@ func (admitter *KubeVirtUpdateAdmitter) Admit(ctx context.Context, ar *admission
 		results = append(results, validateInfraReplicas(newKV.Spec.Infra.Replicas)...)
 	}
 
+	// Validate virt-handler configuration
+	results = append(results, validateVirtHandlerConfig(newKV.Spec.VirtHandler)...)
+
 	response := validating_webhooks.NewAdmissionResponse(results)
 
 	if featureGatesChanged(&currKV.Spec, &newKV.Spec) {
@@ -493,4 +496,54 @@ func validateGuestToRequestHeadroom(ratioStrPtr *string) (causes []metav1.Status
 	}
 
 	return
+}
+
+// validateVirtHandlerConfig validates the virt-handler configuration.
+// - When hostNetwork is enabled, port must be specified to avoid port conflicts
+// - When resources are specified, both CPU and Memory must be set to ensure Guaranteed QoS
+func validateVirtHandlerConfig(handler *v1.VirtHandlerConfig) []metav1.StatusCause {
+	var causes []metav1.StatusCause
+
+	if handler == nil {
+		return causes
+	}
+
+	basePath := field.NewPath("spec").Child("handler")
+
+	// Validate hostNetwork configuration
+	if handler.HostNetwork != nil {
+		hostNetPath := basePath.Child("hostNetwork")
+
+		// Port must be specified for hostNetwork mode
+		if handler.HostNetwork.Port <= 0 || handler.HostNetwork.Port > 65535 {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueInvalid,
+				Field:   hostNetPath.Child("port").String(),
+				Message: "hostNetwork mode requires a valid port (1-65535) to avoid port conflicts",
+			})
+		}
+	}
+
+	// Validate resources configuration (independent of hostNetwork)
+	// When resources are specified, both CPU and Memory must be set for Guaranteed QoS
+	if handler.Resources != nil {
+		resourcesPath := basePath.Child("resources")
+
+		if handler.Resources.CPU == nil {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueRequired,
+				Field:   resourcesPath.Child("cpu").String(),
+				Message: "when resources are specified, CPU must be set for Guaranteed QoS (requests equal limits)",
+			})
+		}
+		if handler.Resources.Memory == nil {
+			causes = append(causes, metav1.StatusCause{
+				Type:    metav1.CauseTypeFieldValueRequired,
+				Field:   resourcesPath.Child("memory").String(),
+				Message: "when resources are specified, Memory must be set for Guaranteed QoS (requests equal limits)",
+			})
+		}
+	}
+
+	return causes
 }

@@ -16059,6 +16059,10 @@
       "description": "Specifies if kubevirt can be deleted if workloads are still present. This is mainly a precaution to avoid accidental data loss",
       "type": "string"
      },
+     "virtHandler": {
+      "description": "VirtHandler configures virt-handler specific deployment options including hostNetwork mode and resource requirements.",
+      "$ref": "#/definitions/v1.VirtHandlerConfig"
+     },
      "workloadUpdateStrategy": {
       "description": "WorkloadUpdateStrategy defines at the cluster level how to handle automated workload updates",
       "default": {},
@@ -17758,6 +17762,49 @@
      "type": {
       "description": "Type specifies the video device type (e.g., virtio, vga, bochs, ramfb). If not specified, the default is architecture-dependent (VGA for BIOS-based VMs, Bochs for EFI-based VMs on AMD64; virtio for Arm and s390x).",
       "type": "string"
+     }
+    }
+   },
+   "v1.VirtHandlerConfig": {
+    "description": "VirtHandlerConfig configures virt-handler deployment options.",
+    "type": "object",
+    "properties": {
+     "hostNetwork": {
+      "description": "HostNetwork configures virt-handler to use host network mode. When enabled, port must be specified to avoid port conflicts.",
+      "$ref": "#/definitions/v1.VirtHandlerNetworkConfig"
+     },
+     "resources": {
+      "description": "Resources specifies the resource requirements for virt-handler. When specified, both CPU and Memory must be set, and requests will equal limits to ensure Guaranteed QoS class.",
+      "$ref": "#/definitions/v1.VirtHandlerResourceRequirements"
+     }
+    }
+   },
+   "v1.VirtHandlerNetworkConfig": {
+    "description": "VirtHandlerNetworkConfig configures networking for virt-handler.",
+    "type": "object",
+    "required": [
+     "port"
+    ],
+    "properties": {
+     "port": {
+      "description": "Port specifies the port for virt-handler when running in hostNetwork mode. This is required when HostNetwork is enabled to avoid port conflicts.",
+      "type": "integer",
+      "format": "int32",
+      "default": 0
+     }
+    }
+   },
+   "v1.VirtHandlerResourceRequirements": {
+    "description": "VirtHandlerResourceRequirements specifies resource requirements for virt-handler. When specified, both CPU and Memory must be set to ensure Guaranteed QoS class (requests equal limits).",
+    "type": "object",
+    "properties": {
+     "cpu": {
+      "description": "CPU specifies the CPU resource request and limit. This value is used for both request and limit to achieve Guaranteed QoS.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.api.resource.Quantity"
+     },
+     "memory": {
+      "description": "Memory specifies the memory resource request and limit. This value is used for both request and limit to achieve Guaranteed QoS.",
+      "$ref": "#/definitions/k8s.io.apimachinery.pkg.api.resource.Quantity"
      }
     }
    },

@@ -362,6 +362,7 @@ func (r *Reconciler) syncDaemonSet(daemonSet *appsv1.DaemonSet) (bool, error) {
 
 	if daemonSet.GetName() == "virt-handler" {
 		setMaxDevices(r.kv, daemonSet)
+		applyVirtHandlerConfig(r.kv, daemonSet)
 	}
 
 	var cachedDaemonSet *appsv1.DaemonSet
@@ -416,6 +417,93 @@ func setMaxDevices(kv *v1.KubeVirt, vh *appsv1.DaemonSet) {
 	vh.Spec.Template.Spec.Containers[0].Command = append(vh.Spec.Template.Spec.Containers[0].Command,
 		"--max-devices",
 		fmt.Sprintf("%d", *kv.Spec.Configuration.VirtualMachineInstancesPerNode))
+}
+
+// applyVirtHandlerConfig applies virt-handler specific configuration to virt-handler DaemonSet.
+// This includes hostNetwork mode and resource requirements (Guaranteed QoS).
+func applyVirtHandlerConfig(kv *v1.KubeVirt, vh *appsv1.DaemonSet) {
+	if kv.Spec.VirtHandler == nil {
+		return
+	}
+
+	container := &vh.Spec.Template.Spec.Containers[0]
+
+	// Apply hostNetwork configuration if specified
+	if kv.Spec.VirtHandler.HostNetwork != nil {
+		applyVirtHandlerHostNetwork(kv.Spec.VirtHandler.HostNetwork, vh, container)
+	}
+
+	// Apply Guaranteed QoS resources if specified (independent of hostNetwork)
+	if kv.Spec.VirtHandler.Resources != nil {
+		applyVirtHandlerResources(kv.Spec.VirtHandler.Resources, container)
+	}
+}
+
+// applyVirtHandlerHostNetwork applies hostNetwork mode configuration to virt-handler DaemonSet.
+// When hostNetwork is enabled:
+// - Sets hostNetwork=true on the pod spec
+// - Updates container port to use the specified hostPort
+// - Updates args, liveness/readiness probes to use the specified port
+func applyVirtHandlerHostNetwork(hostNetConfig *v1.VirtHandlerNetworkConfig, vh *appsv1.DaemonSet, container *corev1.Container) {
+	port := hostNetConfig.Port
+
+	// Enable hostNetwork mode
+	vh.Spec.Template.Spec.HostNetwork = true
+	vh.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+
+	// Update container port with hostPort
+	container.Ports = []corev1.ContainerPort{
+		{
+			Name:          "metrics",
+			Protocol:      corev1.ProtocolTCP,
+			ContainerPort: port,
+			HostPort:      port,
+		},
+	}
+
+	// Update command args to use the specified port
+	newArgs := []string{}
+	skipNext := false
+	for i, arg := range container.Args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if arg == "--port" && i+1 < len(container.Args) {
+			// Replace port value with hostNetwork port
+			newArgs = append(newArgs, "--port", fmt.Sprintf("%d", port))
+			skipNext = true
+		} else {
+			newArgs = append(newArgs, arg)
+		}
+	}
+	container.Args = newArgs
+
+	// Update probes to use the new port
+	portIntOrString := intstr.FromInt32(port)
+	if container.LivenessProbe != nil && container.LivenessProbe.HTTPGet != nil {
+		container.LivenessProbe.HTTPGet.Port = portIntOrString
+	}
+	if container.ReadinessProbe != nil && container.ReadinessProbe.HTTPGet != nil {
+		container.ReadinessProbe.HTTPGet.Port = portIntOrString
+	}
+}
+
+// applyVirtHandlerResources applies resource requirements with Guaranteed QoS class.
+// For Guaranteed QoS, requests must equal limits for both CPU and Memory.
+func applyVirtHandlerResources(resources *v1.VirtHandlerResourceRequirements, container *corev1.Container) {
+	container.Resources = corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{},
+		Limits:   corev1.ResourceList{},
+	}
+	if resources.CPU != nil {
+		container.Resources.Requests[corev1.ResourceCPU] = *resources.CPU
+		container.Resources.Limits[corev1.ResourceCPU] = *resources.CPU
+	}
+	if resources.Memory != nil {
+		container.Resources.Requests[corev1.ResourceMemory] = *resources.Memory
+		container.Resources.Limits[corev1.ResourceMemory] = *resources.Memory
+	}
 }
 
 func (r *Reconciler) syncPodDisruptionBudgetForDeployment(deployment *appsv1.Deployment) error {

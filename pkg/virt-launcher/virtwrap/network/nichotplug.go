@@ -96,70 +96,44 @@ func (vim *virtIOInterfaceManager) hotplugVirtioInterface(vmi *v1.VirtualMachine
 	return nil
 }
 
-func formatBandwidthParams(params *api.BandwidthParams) string {
-	if params == nil {
-		return "nil"
-	}
-	return fmt.Sprintf("avg=%d peak=%d burst=%d", params.Average, params.Peak, params.Burst)
-}
-
-func formatBandwidth(bw *api.BandWidth) string {
-	if bw == nil {
-		return "nil"
-	}
-	return fmt.Sprintf("inbound={%s} outbound={%s}", formatBandwidthParams(bw.Inbound), formatBandwidthParams(bw.Outbound))
-}
-
 func (vim *virtIOInterfaceManager) updateDomainLinkState(currentDomain, desiredDomain *api.Domain) error {
 	currentDomainIfacesByAlias := indexedDomainInterfaces(currentDomain)
 	for _, desiredIface := range desiredDomain.Spec.Devices.Interfaces {
 		curIface, ok := currentDomainIfacesByAlias[desiredIface.Alias.GetName()]
 		if !ok {
-			log.Log.Infof("network hotupdate: desired iface %q not found in current domain", desiredIface.Alias.GetName())
 			continue
 		}
 
 		changed := false
-		linkStateChanged := false
-		bandwidthChanged := false
 		if !isLinkStateEqual(curIface, desiredIface) {
 			curIface.LinkState = desiredIface.LinkState
 			changed = true
-			linkStateChanged = true
 		}
 
 		if !equality.Semantic.DeepEqual(curIface.BandWidth, desiredIface.BandWidth) {
-			log.Log.Infof("network hotupdate: iface=%q bandwidth change detected current=%s desired=%s", desiredIface.Alias.GetName(), formatBandwidth(curIface.BandWidth), formatBandwidth(desiredIface.BandWidth))
 			curIface.BandWidth = desiredIface.BandWidth
 			changed = true
-			bandwidthChanged = true
 		}
 
 		if changed {
-			log.Log.Infof("network hotupdate: iface=%q applying device update linkStateChanged=%t bandwidthChanged=%t", desiredIface.Alias.GetName(), linkStateChanged, bandwidthChanged)
 			if err := vim.updateIfaceInDomain(&curIface); err != nil {
 				return err
 			}
-		} else {
-			log.Log.Infof("network hotupdate: iface=%q no runtime change detected", desiredIface.Alias.GetName())
 		}
 	}
 	return nil
 }
 
 func (vim *virtIOInterfaceManager) updateIfaceInDomain(domIfaceToUpdate *api.Interface) error {
-	log.Log.Infof("network hotupdate: preparing to update interface %q with bandwidth=%s linkState=%v", domIfaceToUpdate.Alias.GetName(), formatBandwidth(domIfaceToUpdate.BandWidth), domIfaceToUpdate.LinkState)
 	ifaceXML, err := xml.Marshal(domIfaceToUpdate)
 	if err != nil {
 		return err
 	}
-	log.Log.Infof("network hotupdate: update interface XML: %s", strings.ToLower(string(ifaceXML)))
 
 	if err = vim.dom.UpdateDeviceFlags(strings.ToLower(string(ifaceXML)), affectDeviceLiveAndConfigLibvirtFlags); err != nil {
-		log.Log.Reason(err).Errorf("network hotupdate: libvirt failed to update interface %s , %v", domIfaceToUpdate.Alias.GetName(), err)
+		log.Log.Reason(err).Errorf("libvirt failed to set link state to interface %s , %v", domIfaceToUpdate.Alias.GetName(), err)
 		return err
 	}
-	log.Log.Infof("network hotupdate: libvirt UpdateDeviceFlags succeeded for interface %q", domIfaceToUpdate.Alias.GetName())
 	return nil
 }
 

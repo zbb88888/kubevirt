@@ -138,11 +138,9 @@ func syncVMIInterfaces(
 func (v *VMController) vmiInterfacesPatch(newVmiSpec *v1.VirtualMachineInstanceSpec, vmi *v1.VirtualMachineInstance) error {
 	if equality.Semantic.DeepEqual(vmi.Spec.Domain.Devices.Interfaces, newVmiSpec.Domain.Devices.Interfaces) &&
 		equality.Semantic.DeepEqual(vmi.Spec.Networks, newVmiSpec.Networks) {
-		log.Log.Object(vmi).Info("network controller: VMI interfaces/networks unchanged, skipping patch")
 		return nil
 	}
 
-	log.Log.Object(vmi).Infof("network controller: patching VMI interfaces from %+v to %+v", vmi.Spec.Domain.Devices.Interfaces, newVmiSpec.Domain.Devices.Interfaces)
 	patchBytes, err := patch.New(
 		patch.WithTest("/spec/networks", vmi.Spec.Networks),
 		patch.WithAdd("/spec/networks", newVmiSpec.Networks),
@@ -152,13 +150,9 @@ func (v *VMController) vmiInterfacesPatch(newVmiSpec *v1.VirtualMachineInstanceS
 	if err != nil {
 		return err
 	}
-	log.Log.Object(vmi).Infof("network controller: generated VMI patch payload: %s", string(patchBytes))
 	_, err = v.clientset.KubevirtV1().
 		VirtualMachineInstances(vmi.Namespace).
 		Patch(context.Background(), vmi.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
-	if err != nil {
-		log.Log.Object(vmi).Reason(err).Error("network controller: failed patching VMI interfaces")
-	}
 
 	return err
 }
@@ -185,21 +179,6 @@ func applyDynamicIfaceRequestOnVMI(
 		shouldUpdateExistingIfaceBandwidth := existsInVMISpec &&
 			!equality.Semantic.DeepEqual(vmIface.Bandwidth, vmiIfaceCopy.Bandwidth) &&
 			vmiIfaceCopy.State != v1.InterfaceStateAbsent
-
-		if existsInVMISpec {
-			log.Log.Infof("network controller: reconcile iface=%s vmBandwidth=%+v vmiBandwidth=%+v state(vm=%s,vmi=%s) hotplug=%t updateState=%t updateBandwidth=%t",
-				vmIface.Name,
-				vmIface.Bandwidth,
-				vmiIfaceCopy.Bandwidth,
-				vmIface.State,
-				vmiIfaceCopy.State,
-				shouldHotplugIface,
-				shouldUpdateExistingIfaceState,
-				shouldUpdateExistingIfaceBandwidth,
-			)
-		} else {
-			log.Log.Infof("network controller: reconcile iface=%s not present in VMI, hotplug=%t vmBandwidth=%+v", vmIface.Name, shouldHotplugIface, vmIface.Bandwidth)
-		}
 
 		switch {
 		case shouldHotplugIface:

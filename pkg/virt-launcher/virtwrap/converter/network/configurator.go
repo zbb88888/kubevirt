@@ -24,6 +24,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "kubevirt.io/api/core/v1"
+	"kubevirt.io/client-go/log"
 
 	netvmispec "kubevirt.io/kubevirt/pkg/network/vmispec"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/api"
@@ -54,6 +55,13 @@ func NewDomainConfigurator(options ...option) DomainConfigurator {
 	}
 
 	return configurator
+}
+
+func valueOrNil[T any, R any](v *T, f func(*T) R) any {
+	if v == nil {
+		return nil
+	}
+	return f(v)
 }
 
 func (d DomainConfigurator) Configure(vmi *v1.VirtualMachineInstance, domain *api.Domain) error {
@@ -122,6 +130,17 @@ func (d DomainConfigurator) configureInterface(iface *v1.Interface, vmi *v1.Virt
 			Inbound:  convertBandwidthParams(iface.Bandwidth.Inbound),
 			Outbound: convertBandwidthParams(iface.Bandwidth.Outbound),
 		}
+		log.Log.Infof("network trace(configurator): iface=%q vmi bandwidth in(avg=%v peak=%v burst=%v) out(avg=%v) libvirt bandwidth in(avg=%d peak=%d burst=%d) out(avg=%d)",
+			iface.Name,
+			valueOrNil(iface.Bandwidth.Inbound, func(p *v1.BandwidthParams) any { return p.Average }),
+			valueOrNil(iface.Bandwidth.Inbound, func(p *v1.BandwidthParams) any { return p.Peak }),
+			valueOrNil(iface.Bandwidth.Inbound, func(p *v1.BandwidthParams) any { return p.Burst }),
+			valueOrNil(iface.Bandwidth.Outbound, func(p *v1.BandwidthParams) any { return p.Average }),
+			libvirtBandwidth.Inbound.Average,
+			libvirtBandwidth.Inbound.Peak,
+			libvirtBandwidth.Inbound.Burst,
+			libvirtBandwidth.Outbound.Average,
+		)
 		builderOptions = append(builderOptions, withBandwidth(libvirtBandwidth))
 	}
 

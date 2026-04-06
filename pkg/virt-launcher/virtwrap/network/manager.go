@@ -23,6 +23,7 @@ import (
 	"libvirt.org/go/libvirt"
 
 	v1 "kubevirt.io/api/core/v1"
+	"kubevirt.io/client-go/log"
 
 	"kubevirt.io/kubevirt/pkg/network/cache"
 	netsetup "kubevirt.io/kubevirt/pkg/network/setup"
@@ -45,6 +46,13 @@ func Sync(
 ) error {
 	if !vmi.IsRunning() {
 		return nil
+	}
+
+	for _, iface := range oldSpec.Devices.Interfaces {
+		log.Log.Infof("network trace(sync): oldSpec iface alias=%q bandwidth=%+v", iface.Alias.GetName(), iface.BandWidth)
+	}
+	for _, iface := range domain.Spec.Devices.Interfaces {
+		log.Log.Infof("network trace(sync): desired domain iface alias=%q bandwidth=%+v", iface.Alias.GetName(), iface.BandWidth)
 	}
 
 	networkConfigurator := netsetup.NewVMNetworkConfigurator(vmi, cache.CacheCreator{}, netsetup.WithDomainAttachments(domainAttachments))

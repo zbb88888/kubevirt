@@ -1248,6 +1248,16 @@ func (l *LibvirtDomainManager) SyncVMI(vmi *v1.VirtualMachineInstance, allowEmul
 		return nil, err
 	}
 
+	for _, iface := range vmi.Spec.Domain.Devices.Interfaces {
+		logger.Infof("network trace(manager): vmi iface=%q spec bandwidth=%+v", iface.Name, iface.Bandwidth)
+	}
+	for _, iface := range oldSpec.Devices.Interfaces {
+		logger.Infof("network trace(manager): old domain iface alias=%q bandwidth=%+v", iface.Alias.GetName(), iface.BandWidth)
+	}
+	for _, iface := range domain.Spec.Devices.Interfaces {
+		logger.Infof("network trace(manager): desired domain iface alias=%q bandwidth=%+v", iface.Alias.GetName(), iface.BandWidth)
+	}
+
 	var domainAttachments map[string]string
 	if options != nil {
 		domainAttachments = options.GetInterfaceDomainAttachment()

@@ -174,15 +174,22 @@ func applyDynamicIfaceRequestOnVMI(
 			vmIface.State != vmiIfaceCopy.State &&
 			vmiIfaceCopy.State != v1.InterfaceStateAbsent
 
+		shouldUpdateExistingIfaceBandwidth := existsInVMISpec &&
+			!equality.Semantic.DeepEqual(vmIface.Bandwidth, vmiIfaceCopy.Bandwidth) &&
+			vmiIfaceCopy.State != v1.InterfaceStateAbsent
+
 		switch {
 		case shouldHotplugIface:
 			vmiSpecCopy.Networks = append(vmiSpecCopy.Networks, vmIndexedNetworks[vmIface.Name])
 			vmiSpecCopy.Domain.Devices.Interfaces = append(vmiSpecCopy.Domain.Devices.Interfaces, vmIface)
 
-		case shouldUpdateExistingIfaceState:
+		case shouldUpdateExistingIfaceState || shouldUpdateExistingIfaceBandwidth:
 			if !(hasOrdinalIfaces && vmIface.State == v1.InterfaceStateAbsent) {
 				vmiIface := vmispec.LookupInterfaceByName(vmiSpecCopy.Domain.Devices.Interfaces, vmIface.Name)
 				vmiIface.State = vmIface.State
+				if shouldUpdateExistingIfaceBandwidth {
+					vmiIface.Bandwidth = vmIface.Bandwidth.DeepCopy()
+				}
 			}
 		}
 	}

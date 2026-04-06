@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/equality"
+
 	"libvirt.org/go/libvirt"
 
 	v1 "kubevirt.io/api/core/v1"
@@ -102,8 +104,18 @@ func (vim *virtIOInterfaceManager) updateDomainLinkState(currentDomain, desiredD
 			continue
 		}
 
+		changed := false
 		if !isLinkStateEqual(curIface, desiredIface) {
 			curIface.LinkState = desiredIface.LinkState
+			changed = true
+		}
+
+		if !equality.Semantic.DeepEqual(curIface.BandWidth, desiredIface.BandWidth) {
+			curIface.BandWidth = desiredIface.BandWidth
+			changed = true
+		}
+
+		if changed {
 			if err := vim.updateIfaceInDomain(&curIface); err != nil {
 				return err
 			}
